@@ -14,6 +14,8 @@
 #include "Logging/MessageLog.h"
 #include "Misc/Paths.h"
 #include "UObject/UObjectHash.h"
+#include "FlowWorldSettings.h"
+#include "Kismet/GameplayStatics.h"
 
 #include UE_INLINE_GENERATED_CPP_BY_NAME(FlowSubsystem)
 
@@ -59,19 +61,77 @@ void UFlowSubsystem::Deinitialize()
 
 void UFlowSubsystem::OnSerialize(FSaveGameArchive& Archive, bool bIsLoading)
 {
-	if (!LoadedSaveGame)
-	{
-		LoadedSaveGame = NewObject<UFlowSaveGame>(this);
-	}
+	Archive.SerializeField("Flow", [&](FStructuredArchive::FSlot Slot)
+		{
+			UFlowSaveGame* save_game = Cast<UFlowSaveGame>(UGameplayStatics::CreateSaveGameObject(UFlowSaveGame::StaticClass()));
 
-	if (bIsLoading)
-	{
-		OnGameLoaded(LoadedSaveGame);
-	}
-	else
-	{
-		OnGameSaved(LoadedSaveGame);
-	}
+			if (!bIsLoading)
+			{
+				OnGameSaved(save_game);
+			}
+
+			int32 flow_components_num = save_game->FlowComponents.Num();
+			FStructuredArchive::FSlot flow_components_slot = Slot.EnterAttribute(TEXT("FlowComponents"));
+			FStructuredArchive::FArray flow_components_array = flow_components_slot.EnterArray(flow_components_num);
+
+			for (int32 i = 0; i < flow_components_num; ++i)
+			{
+				FFlowComponentSaveData flow_component_save_data;
+				if (!bIsLoading)
+				{
+					flow_component_save_data = save_game->FlowComponents[i];
+				}
+
+				FStructuredArchive::FSlot flow_component_slot = flow_components_array.EnterElement();
+				flow_component_save_data.StaticStruct()->SerializeItem(flow_component_slot, &flow_component_save_data, nullptr);
+
+				if (bIsLoading)
+				{
+					save_game->FlowComponents.Add(flow_component_save_data);
+				}
+			}
+
+			int32 flow_instances_num = save_game->FlowInstances.Num();
+			FStructuredArchive::FSlot flow_instances_slot = Slot.EnterAttribute(TEXT("FlowInstances"));
+			FStructuredArchive::FArray flow_instances_array = flow_instances_slot.EnterArray(flow_instances_num);
+
+			for (int32 i = 0; i < flow_instances_num; ++i)
+			{
+				FFlowAssetSaveData flow_instance_save_data;
+				if (!bIsLoading)
+				{
+					flow_instance_save_data = save_game->FlowInstances[i];
+				}
+
+				FStructuredArchive::FSlot flow_instance_slot = flow_instances_array.EnterElement();
+				flow_instance_save_data.StaticStruct()->SerializeItem(flow_instance_slot, &flow_instance_save_data, nullptr);
+
+				if (bIsLoading)
+				{
+					save_game->FlowInstances.Add(flow_instance_save_data);
+				}
+			}
+
+			if (bIsLoading)
+			{
+				OnGameLoaded(save_game);
+
+				if (const AWorldSettings* world_settings = Cast<AWorldSettings>(GetWorld()->GetWorldSettings()))
+				{
+					if (UFlowComponent* component = world_settings->GetComponentByClass<UFlowComponent>())
+					{
+						AbortActiveFlows();
+						component->LoadInstance();
+						component->LoadRootFlow();
+					}
+				}
+			}
+		});
+}
+
+void UFlowSubsystem::ResetSaveGameData()
+{
+	LoadedSaveGame = nullptr;
 }
 
 void UFlowSubsystem::AbortActiveFlows()

@@ -60,8 +60,11 @@ public:
 #endif
 	
 protected:
-	UPROPERTY(SaveGame)
+	UPROPERTY()
 	UFlowSaveGame* LoadedSaveGame;
+
+	FString SaveName = "SaveGameFlow";
+	int32 SaveSlot = 0;
 
 public:
 	virtual bool ShouldCreateSubsystem(UObject* Outer) const override;
@@ -70,6 +73,7 @@ public:
 	virtual void Deinitialize() override;
 
 	virtual void OnSerialize(FSaveGameArchive& Archive, bool bIsLoading) override;
+	virtual void ResetSaveGameData() override;
 
 	UFUNCTION(BlueprintCallable, Category = "FlowSubsystem")
 	virtual void AbortActiveFlows();
