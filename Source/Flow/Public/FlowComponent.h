@@ -119,12 +119,12 @@ public:
 
 	// Send single notification from the actor to Flow graphs
 	// If set on server, it always going to be replicated to clients
-	UFUNCTION(BlueprintCallable, Category = "Flow", meta = (Categories = "Flow"))
+	UFUNCTION(BlueprintCallable, Category = "Flow", meta = (Categories = "Flow.Notify"))
 	void NotifyGraph(const FGameplayTag NotifyTag, const EFlowNetMode NetMode = EFlowNetMode::Authority);
 
 	// Send multiple notifications at once - from the actor to Flow graphs
 	// If set on server, it always going to be replicated to clients
-	UFUNCTION(BlueprintCallable, Category = "Flow", meta = (Categories = "Flow"))
+	UFUNCTION(BlueprintCallable, Category = "Flow", meta = (Categories = "Flow.Notify"))
 	void BulkNotifyGraph(const FGameplayTagContainer NotifyTags, const EFlowNetMode NetMode = EFlowNetMode::Authority);
 
 private:
