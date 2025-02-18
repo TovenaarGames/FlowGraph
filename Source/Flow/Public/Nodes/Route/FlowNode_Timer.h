@@ -23,10 +23,10 @@ protected:
 	UPROPERTY(EditAnywhere, Category = "Timer", meta = (ClampMin = 0.0f))
 	float StepTime;
 
-private:
 	FTimerHandle CompletionTimerHandle;
 	FTimerHandle StepTimerHandle;
 
+private:
 	UPROPERTY(SaveGame)
 	float SumOfSteps;
 
