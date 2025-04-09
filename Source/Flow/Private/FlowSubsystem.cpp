@@ -63,13 +63,16 @@ void UFlowSubsystem::OnSerialize(FSaveGameArchive& Archive, bool bIsLoading)
 {
 	Archive.SerializeField("Flow", [&](FStructuredArchive::FSlot Slot)
 		{
-			UFlowSaveGame* save_game = Cast<UFlowSaveGame>(UGameplayStatics::CreateSaveGameObject(UFlowSaveGame::StaticClass()));
+			// Reuse existing save if possible
+			UFlowSaveGame* save_game = LoadedSaveGame ? LoadedSaveGame : Cast<UFlowSaveGame>(UGameplayStatics::CreateSaveGameObject(UFlowSaveGame::StaticClass()));
 
+			// Append current world data to save game when saving
 			if (!bIsLoading)
 			{
 				OnGameSaved(save_game);
 			}
 
+			// Serialize the save game from or to the structured archive slot
 			int32 flow_components_num = save_game->FlowComponents.Num();
 			FStructuredArchive::FSlot flow_components_slot = Slot.EnterAttribute(TEXT("FlowComponents"));
 			FStructuredArchive::FArray flow_components_array = flow_components_slot.EnterArray(flow_components_num);
@@ -112,6 +115,7 @@ void UFlowSubsystem::OnSerialize(FSaveGameArchive& Archive, bool bIsLoading)
 				}
 			}
 
+			// Populate the flowcomponents with the savegame data when loading
 			if (bIsLoading)
 			{
 				OnGameLoaded(save_game);
