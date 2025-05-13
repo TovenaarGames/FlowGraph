@@ -1,11 +1,20 @@
 // Copyright https://github.com/MothCocoon/FlowGraph/graphs/contributors
 
 #include "AddOns/FlowNodeAddOn.h"
+
+#include "FlowLogChannels.h"
 #include "Nodes/FlowNode.h"
 
 #include "Misc/RuntimeErrors.h"
 
 #include UE_INLINE_GENERATED_CPP_BY_NAME(FlowNodeAddOn)
+
+UFlowNodeAddOn::UFlowNodeAddOn()
+{
+#if WITH_EDITOR
+	NodeDisplayStyle = FlowNodeStyle::AddOn;
+#endif
+}
 
 void UFlowNodeAddOn::InitializeInstance()
 {
@@ -45,7 +54,9 @@ void UFlowNodeAddOn::Finish()
 	}
 }
 
-EFlowAddOnAcceptResult UFlowNodeAddOn::AcceptFlowNodeAddOnParent_Implementation(const UFlowNodeBase* ParentTemplate) const
+EFlowAddOnAcceptResult UFlowNodeAddOn::AcceptFlowNodeAddOnParent_Implementation(
+	const UFlowNodeBase* ParentTemplate,
+	const TArray<UFlowNodeAddOn*>& AdditionalAddOnsToAssumeAreChildren) const
 {
 	// Subclasses may override this function to opt in to parent classes
 	return EFlowAddOnAcceptResult::Undetermined;
@@ -94,3 +105,36 @@ void UFlowNodeAddOn::CacheFlowNode()
 
 	ensureAsRuntimeWarning(FlowNode);
 }
+
+#if WITH_EDITOR
+TArray<FFlowPin> UFlowNodeAddOn::GetPinsForContext(const TArray<FFlowPin>& Context) const
+{
+	TArray<FFlowPin> ContextPins = Super::GetContextInputs();
+
+	ContextPins.Reserve(ContextPins.Num() + Context.Num());
+	
+	for (const FFlowPin& InputPin : Context)
+	{
+		if (InputPin.IsValid())
+		{
+			ContextPins.Add(InputPin);
+		}
+		else
+		{
+			UE_LOG(LogFlow, Warning, TEXT("Addon %s has invalid pins (name: None), you should clean these up."), *GetName());
+		}
+	}
+
+	return ContextPins;
+}
+
+TArray<FFlowPin> UFlowNodeAddOn::GetContextInputs() const
+{
+	return GetPinsForContext(InputPins);
+}
+
+TArray<FFlowPin> UFlowNodeAddOn::GetContextOutputs() const
+{
+	return GetPinsForContext(OutputPins);
+}
+#endif // WITH_EDITOR

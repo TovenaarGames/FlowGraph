@@ -7,7 +7,7 @@
 #include "FlowLogChannels.h"
 #include "FlowSave.h"
 #include "FlowSettings.h"
-#include "Nodes/Route/FlowNode_SubGraph.h"
+#include "Nodes/Graph/FlowNode_SubGraph.h"
 
 #include "Engine/GameInstance.h"
 #include "Engine/World.h"
@@ -20,7 +20,7 @@
 
 #include UE_INLINE_GENERATED_CPP_BY_NAME(FlowSubsystem)
 
-#if WITH_EDITOR
+#if !UE_BUILD_SHIPPING
 FNativeFlowAssetEvent UFlowSubsystem::OnInstancedTemplateAdded;
 FNativeFlowAssetEvent UFlowSubsystem::OnInstancedTemplateRemoved;
 #endif
@@ -170,6 +170,8 @@ void UFlowSubsystem::StartRootFlow(UObject* Owner, UFlowAsset* FlowAsset, const 
 	{
 		if (UFlowAsset* NewFlow = CreateRootFlow(Owner, FlowAsset, bAllowMultipleInstances))
 		{
+			// todo: (gtaylor) In the future, we may want to provide a way to set a data pin value supplier
+			// for the root flow graph.
 			NewFlow->StartFlow();
 		}
 	}
@@ -182,9 +184,9 @@ void UFlowSubsystem::StartRootFlow(UObject* Owner, UFlowAsset* FlowAsset, const 
 #endif
 }
 
-UFlowAsset* UFlowSubsystem::CreateRootFlow(UObject* Owner, UFlowAsset* FlowAsset, const bool bAllowMultipleInstances, FString NewInstanceName)
+UFlowAsset* UFlowSubsystem::CreateRootFlow(UObject* Owner, UFlowAsset* FlowAsset, const bool bAllowMultipleInstances, const FString& NewInstanceName)
 {
-	for (const TPair<UFlowAsset*, TWeakObjectPtr<UObject>>& RootInstance : RootInstances)
+	for (const TPair<UFlowAsset*, TWeakObjectPtr<UObject>>& RootInstance : ObjectPtrDecay(RootInstances))
 	{
 		if (Owner == RootInstance.Value.Get() && FlowAsset == RootInstance.Key->GetTemplateAsset())
 		{
@@ -212,7 +214,7 @@ void UFlowSubsystem::FinishRootFlow(UObject* Owner, UFlowAsset* TemplateAsset, c
 {
 	UFlowAsset* InstanceToFinish = nullptr;
 
-	for (TPair<UFlowAsset*, TWeakObjectPtr<UObject>>& RootInstance : RootInstances)
+	for (TPair<TObjectPtr<UFlowAsset>, TWeakObjectPtr<UObject>>& RootInstance : RootInstances)
 	{
 		if (Owner && Owner == RootInstance.Value.Get() && RootInstance.Key && RootInstance.Key->GetTemplateAsset() == TemplateAsset)
 		{
@@ -232,7 +234,7 @@ void UFlowSubsystem::FinishAllRootFlows(UObject* Owner, const EFlowFinishPolicy 
 {
 	TArray<UFlowAsset*> InstancesToFinish;
 
-	for (TPair<UFlowAsset*, TWeakObjectPtr<UObject>>& RootInstance : RootInstances)
+	for (TPair<TObjectPtr<UFlowAsset>, TWeakObjectPtr<UObject>>& RootInstance : RootInstances)
 	{
 		if (Owner && Owner == RootInstance.Value.Get() && RootInstance.Key)
 		{
@@ -247,14 +249,14 @@ void UFlowSubsystem::FinishAllRootFlows(UObject* Owner, const EFlowFinishPolicy 
 	}
 }
 
-UFlowAsset* UFlowSubsystem::CreateSubFlow(UFlowNode_SubGraph* SubGraphNode, const FString SavedInstanceName, const bool bPreloading /* = false */)
+UFlowAsset* UFlowSubsystem::CreateSubFlow(UFlowNode_SubGraph* SubGraphNode, const FString& SavedInstanceName, const bool bPreloading /* = false */)
 {
 	UFlowAsset* NewInstance = nullptr;
 
 	if (!InstancedSubFlows.Contains(SubGraphNode))
 	{
 		const TWeakObjectPtr<UObject> Owner = SubGraphNode->GetFlowAsset() ? SubGraphNode->GetFlowAsset()->GetOwner() : nullptr;
-		NewInstance = CreateFlowInstance(Owner, SubGraphNode->Asset, SavedInstanceName);
+		NewInstance = CreateFlowInstance(Owner, SubGraphNode->Asset.LoadSynchronous(), SavedInstanceName);
 
 		if (NewInstance)
 		{
@@ -278,7 +280,7 @@ UFlowAsset* UFlowSubsystem::CreateSubFlow(UFlowNode_SubGraph* SubGraphNode, cons
 		// don't activate Start Node if we're loading Sub Graph from SaveGame
 		if (SavedInstanceName.IsEmpty())
 		{
-			AssetInstance->StartFlow();
+			AssetInstance->StartFlow(SubGraphNode);
 		}
 	}
 
@@ -290,18 +292,19 @@ void UFlowSubsystem::RemoveSubFlow(UFlowNode_SubGraph* SubGraphNode, const EFlow
 	if (InstancedSubFlows.Contains(SubGraphNode))
 	{
 		UFlowAsset* AssetInstance = InstancedSubFlows[SubGraphNode];
-		AssetInstance->NodeOwningThisAssetInstance = nullptr;
-
+		
 		SubGraphNode->GetFlowAsset()->ActiveSubGraphs.Remove(SubGraphNode);
 		InstancedSubFlows.Remove(SubGraphNode);
 
 		AssetInstance->FinishFlow(FinishPolicy);
+
+		// Make sure to set the NodeOwningThisAssetInstance after the FinishFlow call, as it may be needed in the FinishFlow method
+		AssetInstance->NodeOwningThisAssetInstance = nullptr;
 	}
 }
 
-UFlowAsset* UFlowSubsystem::CreateFlowInstance(const TWeakObjectPtr<UObject> Owner, TSoftObjectPtr<UFlowAsset> FlowAsset, FString NewInstanceName)
+UFlowAsset* UFlowSubsystem::CreateFlowInstance(const TWeakObjectPtr<UObject> Owner, UFlowAsset* LoadedFlowAsset, FString NewInstanceName)
 {
-	UFlowAsset* LoadedFlowAsset = FlowAsset.LoadSynchronous();
 	if (LoadedFlowAsset == nullptr)
 	{
 		return nullptr;
@@ -324,7 +327,7 @@ UFlowAsset* UFlowSubsystem::CreateFlowInstance(const TWeakObjectPtr<UObject> Own
 	}
 
 	UFlowAsset* NewInstance = NewObject<UFlowAsset>(this, LoadedFlowAsset->GetClass(), *NewInstanceName, RF_Transient, LoadedFlowAsset, false, nullptr);
-	NewInstance->InitializeInstance(Owner, LoadedFlowAsset);
+	NewInstance->InitializeInstance(Owner, *LoadedFlowAsset);
 
 	LoadedFlowAsset->AddInstance(NewInstance);
 
@@ -357,7 +360,7 @@ void UFlowSubsystem::RemoveInstancedTemplate(UFlowAsset* Template)
 TMap<UObject*, UFlowAsset*> UFlowSubsystem::GetRootInstances() const
 {
 	TMap<UObject*, UFlowAsset*> Result;
-	for (const TPair<UFlowAsset*, TWeakObjectPtr<UObject>>& RootInstance : RootInstances)
+	for (const TPair<UFlowAsset*, TWeakObjectPtr<UObject>>& RootInstance : ObjectPtrDecay(RootInstances))
 	{
 		Result.Emplace(RootInstance.Value.Get(), RootInstance.Key);
 	}
@@ -367,7 +370,7 @@ TMap<UObject*, UFlowAsset*> UFlowSubsystem::GetRootInstances() const
 TSet<UFlowAsset*> UFlowSubsystem::GetRootInstancesByOwner(const UObject* Owner) const
 {
 	TSet<UFlowAsset*> Result;
-	for (const TPair<UFlowAsset*, TWeakObjectPtr<UObject>>& RootInstance : RootInstances)
+	for (const TPair<UFlowAsset*, TWeakObjectPtr<UObject>>& RootInstance : ObjectPtrDecay(RootInstances))
 	{
 		if (Owner && RootInstance.Value == Owner)
 		{
@@ -420,7 +423,7 @@ void UFlowSubsystem::OnGameSaved(UFlowSaveGame* SaveGame)
 	}
 
 	// save Flow Graphs
-	for (const TPair<UFlowAsset*, TWeakObjectPtr<UObject>>& RootInstance : RootInstances)
+	for (const TPair<UFlowAsset*, TWeakObjectPtr<UObject>>& RootInstance : ObjectPtrDecay(RootInstances))
 	{
 		if (RootInstance.Key && RootInstance.Value.IsValid())
 		{

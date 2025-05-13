@@ -22,22 +22,40 @@ class UEdGraph;
 class UEdGraphNode;
 class UFlowAsset;
 
-#if WITH_EDITOR
-
-/** Interface for calling the graph editor methods */
-class FLOW_API IFlowGraphInterface
-{
-public:
-	IFlowGraphInterface() {}
-	virtual ~IFlowGraphInterface() {}
-
-	virtual void OnInputTriggered(UEdGraphNode* GraphNode, const int32 Index) const {}
-	virtual void OnOutputTriggered(UEdGraphNode* GraphNode, const int32 Index) const {}
-};
-
+#if !UE_BUILD_SHIPPING
 DECLARE_DELEGATE(FFlowGraphEvent);
-
+DECLARE_DELEGATE_TwoParams(FFlowSignalEvent, const FGuid& /*NodeGuid*/, const FName& /*PinName*/);
 #endif
+
+// Working Data struct for the Harvest Data Pins operation
+// (passed between functions involved in the harvesting operation to simplify the function signatures)
+struct FFlowHarvestDataPinsWorkingData
+{
+	FFlowHarvestDataPinsWorkingData(UFlowNode& InFlowNode, const TMap<FName, FName>& PinNameMapPrev, const TArray<FFlowPin>& InputPinsPrev, const TArray<FFlowPin>& OutputPinsPrev)
+		: FlowNode(&InFlowNode)
+		, PinNameToBoundPropertyNameMapPrev(PinNameMapPrev)
+		, AutoInputDataPinsPrev(InputPinsPrev)
+		, AutoOutputDataPinsPrev(OutputPinsPrev)
+		{ }
+
+#if WITH_EDITOR
+	bool DidPinNameToBoundPropertyNameMapChange() const;
+	bool DidAutoInputDataPinsChange() const;
+	bool DidAutoOutputDataPinsChange() const;
+#endif
+
+	UFlowNode* FlowNode = nullptr;
+
+	const TMap<FName, FName>& PinNameToBoundPropertyNameMapPrev;
+	const TArray<FFlowPin>& AutoInputDataPinsPrev;
+	const TArray<FFlowPin>& AutoOutputDataPinsPrev;
+	
+	TMap<FName, FName> PinNameToBoundPropertyNameMapNext;
+	TArray<FFlowPin> AutoInputDataPinsNext;
+	TArray<FFlowPin> AutoOutputDataPinsNext;
+
+	bool bPinNameMapChanged = false;
+};
 
 /**
  * Single asset containing flow nodes.
@@ -66,7 +84,7 @@ public:
 	bool bWorldBound;
 
 //////////////////////////////////////////////////////////////////////////
-// Graph
+// Graph (editor-only)
 
 #if WITH_EDITOR
 public:	
@@ -78,12 +96,23 @@ public:
 	virtual void PostDuplicate(bool bDuplicateForPIE) override;
 	virtual void PostLoad() override;
 	// --
+#endif	
 
+#if WITH_EDITORONLY_DATA
 public:
 	FSimpleDelegate OnDetailsRefreshRequested;
 
 	static FString ValidationError_NodeClassNotAllowed;
 	static FString ValidationError_NullNodeInstance;
+
+private:
+	UPROPERTY()
+	TObjectPtr<UEdGraph> FlowGraph;
+#endif
+
+#if WITH_EDITOR
+public:
+	UEdGraph* GetGraph() const { return FlowGraph; }
 
 	virtual EDataValidationResult ValidateAsset(FFlowMessageLog& MessageLog);
 
@@ -94,42 +123,26 @@ protected:
 	bool CanFlowNodeClassBeUsedByFlowAsset(const UClass& FlowNodeClass) const;
 	bool CanFlowAssetUseFlowNodeClass(const UClass& FlowNodeClass) const;
 	bool CanFlowAssetReferenceFlowNode(const UClass& FlowNodeClass, FText* OutOptionalFailureReason = nullptr) const;
+
+	bool IsFlowNodeClassInAllowedClasses(const UClass& FlowNodeClass, const TSubclassOf<UFlowNodeBase> RequiredAncestor = nullptr) const;
+	bool IsFlowNodeClassInDeniedClasses(const UClass& FlowNodeClass) const;
 #endif
-
-	// IFlowGraphInterface
-#if WITH_EDITORONLY_DATA
-
-private:
-	UPROPERTY()
-	TObjectPtr<UEdGraph> FlowGraph;
-
-	static TSharedPtr<IFlowGraphInterface> FlowGraphInterface;
-#endif
-
-public:
-#if WITH_EDITOR
-	UEdGraph* GetGraph() const { return FlowGraph; };
-
-	static void SetFlowGraphInterface(TSharedPtr<IFlowGraphInterface> InFlowAssetEditor);
-	static TSharedPtr<IFlowGraphInterface> GetFlowGraphInterface() { return FlowGraphInterface; };
-#endif
-	// -- 
 
 //////////////////////////////////////////////////////////////////////////
 // Nodes
 
 protected:
-	TArray<TSubclassOf<UFlowNode>> AllowedNodeClasses;
-	TArray<TSubclassOf<UFlowNode>> DeniedNodeClasses;
+	TArray<TSubclassOf<UFlowNodeBase>> AllowedNodeClasses;
+	TArray<TSubclassOf<UFlowNodeBase>> DeniedNodeClasses;
 
-	TArray<TSubclassOf<UFlowNode>> AllowedInSubgraphNodeClasses;
-	TArray<TSubclassOf<UFlowNode>> DeniedInSubgraphNodeClasses;
+	TArray<TSubclassOf<UFlowNodeBase>> AllowedInSubgraphNodeClasses;
+	TArray<TSubclassOf<UFlowNodeBase>> DeniedInSubgraphNodeClasses;
 	
 	bool bStartNodePlacedAsGhostNode;
 
 private:
 	UPROPERTY()
-	TMap<FGuid, UFlowNode*> Nodes;
+	TMap<FGuid, TObjectPtr<UFlowNode>> Nodes;
 
 #if WITH_EDITORONLY_DATA
 protected:
@@ -157,11 +170,31 @@ public:
 	void RegisterNode(const FGuid& NewGuid, UFlowNode* NewNode);
 	void UnregisterNode(const FGuid& NodeGuid);
 
-	// Processes all nodes and creates map of all pin connections
-	void HarvestNodeConnections();
+	// Processes nodes and updates pin connections from the graph to the UFlowNode (processes all nodes in the graph if passed nullptr)
+	void HarvestNodeConnections(UFlowNode* TargetNode = nullptr);
+
+	// Updates the auto-generated pins and bindings for a given FlowNode,
+	// returns true if any changes were made.
+	bool TryUpdateManagedFlowPinsForNode(UFlowNode& FlowNode);
+
+protected:
+	void AddDataPinPropertyBindingToMap(
+		const FName& PinAuthoredName,
+		const FName& PropertyAuthoredName,
+		FFlowHarvestDataPinsWorkingData& InOutData);
+	virtual bool TryCreateFlowDataPinFromMetadataValue(
+		const FString& MetadataValue,
+		UFlowNode& FlowNode,
+		const FProperty& Property,
+		const FText& PinDisplayName,
+		const bool bIsInputPin,
+		TArray<FFlowPin>* InOutDataPinsNext) const;
+
+	void HarvestFlowPinMetadataForProperty(const FProperty* Property, FFlowHarvestDataPinsWorkingData& InOutData);
 #endif
 
-	const TMap<FGuid, UFlowNode*>& GetNodes() const { return Nodes; }
+public:
+	const TMap<FGuid, UFlowNode*>& GetNodes() const { return ObjectPtrDecay(Nodes); }
 	UFlowNode* GetNode(const FGuid& Guid) const { return Nodes.FindRef(Guid); }
 
 	template <class T>
@@ -206,7 +239,7 @@ protected:
 			OutNodes.Emplace(NodeOfRequiredType);
 		}
 
-		for (UFlowNode* ConnectedNode : Node->GetConnectedNodes())
+		for (UFlowNode* ConnectedNode : Node->GatherConnectedNodes())
 		{
 			if (ConnectedNode && !IteratedNodes.Contains(ConnectedNode))
 			{
@@ -232,7 +265,7 @@ protected:
 
 	void AddCustomOutput(const FName& EventName);
 	void RemoveCustomOutput(const FName& EventName);
-#endif // WITH_EDITOR
+#endif
 	
 //////////////////////////////////////////////////////////////////////////
 // Instances of the template asset
@@ -240,7 +273,7 @@ protected:
 private:
 	// Original object holds references to instances
 	UPROPERTY(Transient)
-	TArray<UFlowAsset*> ActiveInstances;
+	TArray<TObjectPtr<UFlowAsset>> ActiveInstances;
 
 #if WITH_EDITORONLY_DATA
 	TWeakObjectPtr<UFlowAsset> InspectedInstance;
@@ -283,7 +316,7 @@ private:
 
 protected:
 	UPROPERTY()
-	UFlowAsset* TemplateAsset;
+	TObjectPtr<UFlowAsset> TemplateAsset;
 
 	// Object that spawned Root Flow instance, i.e. World Settings or Player Controller
 	// This pointer is passed to child instances: Flow Asset instances created by the SubGraph nodes
@@ -296,25 +329,30 @@ protected:
 	TMap<TWeakObjectPtr<UFlowNode_SubGraph>, TWeakObjectPtr<UFlowAsset>> ActiveSubGraphs;
 
 	// Optional entry points to the graph, similar to blueprint Custom Events
+	// Contains nodes only if it is initialized instance (see InitializeInstance, IsInstanceInitialized), empty otherwise
 	UPROPERTY()
-	TSet<UFlowNode_CustomInput*> CustomInputNodes;
+	TSet<TObjectPtr<UFlowNode_CustomInput>> CustomInputNodes;
 
 	UPROPERTY()
-	TSet<UFlowNode*> PreloadedNodes;
+	TSet<TObjectPtr<UFlowNode>> PreloadedNodes;
 
 	// Nodes that have any work left, not marked as Finished yet
 	UPROPERTY()
-	TArray<UFlowNode*> ActiveNodes;
+	TArray<TObjectPtr<UFlowNode>> ActiveNodes;
 
 	// All nodes active in the past, done their work
 	UPROPERTY()
-	TArray<UFlowNode*> RecordedNodes;
+	TArray<TObjectPtr<UFlowNode>> RecordedNodes;
 
 	EFlowFinishPolicy FinishPolicy;
 
 public:
-	virtual void InitializeInstance(const TWeakObjectPtr<UObject> InOwner, UFlowAsset* InTemplateAsset);
+	UE_DEPRECATED(5.4, "Use version that takes a UFlowAssetReference instead.")
+	virtual void InitializeInstance(const TWeakObjectPtr<UObject> InOwner, UFlowAsset* InTemplateAsset) { InitializeInstance(InOwner, *InTemplateAsset); }
+
+	virtual void InitializeInstance(const TWeakObjectPtr<UObject> InOwner, UFlowAsset& InTemplateAsset);
 	virtual void DeinitializeInstance();
+	bool IsInstanceInitialized() const { return IsValid(TemplateAsset); }
 
 	UFlowAsset* GetTemplateAsset() const { return TemplateAsset; }
 
@@ -337,12 +375,12 @@ public:
 	virtual void PreloadNodes() {}
 
 	virtual void PreStartFlow();
-	virtual void StartFlow();
+	virtual void StartFlow(IFlowDataPinValueSupplierInterface* DataPinValueSupplier = nullptr);
 
 	virtual void FinishFlow(const EFlowFinishPolicy InFinishPolicy, const bool bRemoveInstance = true);
 
 	bool HasStartedFlow() const;
-	void TriggerCustomInput(const FName& EventName);
+	void TriggerCustomInput(const FName& EventName, IFlowDataPinValueSupplierInterface* DataPinValueSupplier = nullptr);
 
 	// Get Flow Asset instance created by the given SubGraph node
 	TWeakObjectPtr<UFlowAsset> GetFlowInstance(UFlowNode_SubGraph* SubGraphNode) const;
@@ -356,6 +394,11 @@ protected:
 	void FinishNode(UFlowNode* Node);
 	void ResetNodes();
 
+#if !UE_BUILD_SHIPPING
+public:	
+	FFlowSignalEvent OnPinTriggered;
+#endif
+	
 public:
 	UFlowSubsystem* GetFlowSubsystem() const;
 	FName GetDisplayName() const;

@@ -53,17 +53,8 @@ class FLOW_API UFlowComponent : public UActorComponent, public IFlowOwnerInterfa
 //////////////////////////////////////////////////////////////////////////
 // Identity Tags
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Flow", meta=(Categories="Flow.Id"))
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, ReplicatedUsing = OnRep_IdentityTags, Category = "Flow", meta=(Categories="Flow.Id"))
 	FGameplayTagContainer IdentityTags;
-
-private:
-	// Used to replicate tags added during gameplay
-	UPROPERTY(ReplicatedUsing = OnRep_AddedIdentityTags)
-	FGameplayTagContainer AddedIdentityTags;
-
-	// Used to replicate tags removed during gameplay
-	UPROPERTY(ReplicatedUsing = OnRep_RemovedIdentityTags)
-	FGameplayTagContainer RemovedIdentityTags;
 
 public:
 	virtual void BeginPlay() override;
@@ -88,10 +79,7 @@ protected:
 
 private:
 	UFUNCTION()
-	void OnRep_AddedIdentityTags();
-
-	UFUNCTION()
-	void OnRep_RemovedIdentityTags();
+	void OnRep_IdentityTags(const FGameplayTagContainer& PreviousTags);
 
 public:
 	UPROPERTY(BlueprintAssignable, Category = "Flow")
@@ -177,7 +165,7 @@ private:
 public:
 	// Asset that might instantiated as "Root Flow" 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RootFlow")
-	UFlowAsset* RootFlow;
+	TObjectPtr<UFlowAsset> RootFlow;
 
 	// If true, component will start Root Flow on Begin Play
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "RootFlow")
@@ -193,15 +181,15 @@ public:
 
 	UPROPERTY(SaveGame)
 	FString SavedAssetInstanceName;
-	
+
 	// This will instantiate Flow Asset assigned on this component.
 	// Created Flow Asset instance will be a "root flow", as additional Flow Assets can be instantiated via Sub Graph node
 	UFUNCTION(BlueprintCallable, Category = "RootFlow")
-	void StartRootFlow();
+	virtual void StartRootFlow();
 
 	// This will destroy instantiated Flow Asset - created from asset assigned on this component.
 	UFUNCTION(BlueprintCallable, Category = "RootFlow")
-	void FinishRootFlow(UFlowAsset* TemplateAsset, const EFlowFinishPolicy FinishPolicy);
+	virtual void FinishRootFlow(UFlowAsset* TemplateAsset, const EFlowFinishPolicy FinishPolicy);
 
 	UFUNCTION(BlueprintPure, Category = "FlowSubsystem")
 	TSet<UFlowAsset*> GetRootInstances(const UObject* Owner) const;
@@ -210,18 +198,31 @@ public:
 	UFlowAsset* GetRootFlowInstance() const;
 
 //////////////////////////////////////////////////////////////////////////
-// UFlowComponent overrideable events
+// Custom Input and Output events
 
 public:
-	// Called when a Root flow asset triggers a CustomOutput
-	UFUNCTION(BlueprintImplementableEvent, DisplayName = "OnTriggerRootFlowOutputEvent")
-	void BP_OnTriggerRootFlowOutputEvent(UFlowAsset* RootFlowInstance, const FName& EventName);
+	// This will trigger a specific CustomInput on this components root flow
+	UFUNCTION(BlueprintCallable, Category = "RootFlow")
+	void TriggerRootFlowCustomInput(const FName& EventName) const;
 
-	virtual void OnTriggerRootFlowOutputEvent(UFlowAsset* RootFlowInstance, const FName& EventName) {}
+	// Called when a Root flow asset triggers a CustomOutput
+	UFUNCTION(BlueprintImplementableEvent, DisplayName = "OnRootFlowCustomEvent")
+	void BP_OnRootFlowCustomEvent(UFlowAsset* RootFlowInstance, const FName& EventName);
+
+	virtual void OnRootFlowCustomEvent(UFlowAsset* RootFlowInstance, const FName& EventName) {}
 
 	// UFlowAsset-only access
-	void OnTriggerRootFlowOutputEventDispatcher(UFlowAsset* RootFlowInstance, const FName& EventName);
+	void DispatchRootFlowCustomEvent(UFlowAsset* RootFlowInstance, const FName& EventName);
 	// ---
+
+	UE_DEPRECATED(5.5, "Please use OnRootFlowCustomEvent instead.")
+	void BP_OnTriggerRootFlowOutputEvent(UFlowAsset* RootFlowInstance, const FName& EventName);
+	
+	UE_DEPRECATED(5.5, "Please use OnRootFlowCustomEvent instead.")
+	virtual void OnTriggerRootFlowOutputEvent(UFlowAsset* RootFlowInstance, const FName& EventName);
+	
+	UE_DEPRECATED(5.5, "Please use OnTriggerRootFlowCustomOutputDispatcher instead.")
+	void OnTriggerRootFlowOutputEventDispatcher(UFlowAsset* RootFlowInstance, const FName& EventName);
 
 //////////////////////////////////////////////////////////////////////////
 // SaveGame

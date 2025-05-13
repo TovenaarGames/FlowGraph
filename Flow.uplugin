@@ -1,6 +1,6 @@
 {
 	"FileVersion" : 3,
-	"Version" : 2.0,
+	"Version" : 2.1,
 	"FriendlyName" : "Flow",
 	"Description" : "Design-agnostic node editor for scripting game’s flow.",
 	"Category" : "Gameplay",
@@ -17,6 +17,11 @@
 		{
 			"Name" : "Flow",
 			"Type" : "Runtime",
+			"LoadingPhase" : "PreDefault"
+		},
+		{
+			"Name" : "FlowDebugger",
+			"Type" : "DeveloperTool",
 			"LoadingPhase" : "PreDefault"
 		},
 		{
@@ -37,6 +42,14 @@
 		{
 			"Name": "SaveGamePlugin",
 			"Enabled":  true
+		},
+		{
+			"Name": "EngineAssetDefinitions",
+			"Enabled": true
+		},
+		{
+			"Name": "StructUtils",
+			"Enabled": true
 		}
 	]
 }
