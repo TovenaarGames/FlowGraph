@@ -16,6 +16,7 @@
 #include "UObject/UObjectHash.h"
 #include "FlowWorldSettings.h"
 #include "Kismet/GameplayStatics.h"
+#include "SaveGameSubsystem.h"
 
 #include UE_INLINE_GENERATED_CPP_BY_NAME(FlowSubsystem)
 
@@ -120,13 +121,19 @@ void UFlowSubsystem::OnSerialize(FSaveGameArchive& Archive, bool bIsLoading)
 			{
 				OnGameLoaded(save_game);
 
-				if (const AWorldSettings* world_settings = Cast<AWorldSettings>(GetWorld()->GetWorldSettings()))
+				// Reset the root flow in case it is running
+				if (!RootInstances.IsEmpty())
 				{
-					if (UFlowComponent* component = world_settings->GetComponentByClass<UFlowComponent>())
+					if (const AWorldSettings* world_settings = Cast<AWorldSettings>(GetWorld()->GetWorldSettings()))
 					{
-						AbortActiveFlows();
-						component->LoadInstance();
-						component->LoadRootFlow();
+						if (UFlowComponent* component = world_settings->GetComponentByClass<UFlowComponent>())
+						{
+							if (component->LoadInstance())
+							{
+								AbortActiveFlows();
+								component->LoadRootFlow();
+							}
+						}
 					}
 				}
 			}

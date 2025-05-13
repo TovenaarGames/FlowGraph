@@ -15,6 +15,7 @@
 #include "Net/Core/PushModel/PushModel.h"
 #include "Serialization/MemoryReader.h"
 #include "Serialization/MemoryWriter.h"
+#include "SaveGameSubsystem.h"
 
 #include UE_INLINE_GENERATED_CPP_BY_NAME(FlowComponent)
 
@@ -82,13 +83,24 @@ void UFlowComponent::BeginRootFlow(bool bComponentLoadedFromSaveGame)
 {
 	if (RootFlow)
 	{
-		if (bComponentLoadedFromSaveGame)
+		if (USaveGameSubsystem* save_system = GetWorld()->GetGameInstance()->GetSubsystem<USaveGameSubsystem>())
 		{
-			LoadRootFlow();
+			// Wait until the save game system has loaded the flow graph
+			save_system->CallOnLoad(FSimpleMulticastDelegate::FDelegate::CreateLambda([this, bComponentLoadedFromSaveGame]() {
+
+				if (bComponentLoadedFromSaveGame)
+				{
+					LoadRootFlow();
+				}
+				else if (bAutoStartRootFlow)
+				{
+					StartRootFlow();
+				}
+			}));
 		}
-		else if (bAutoStartRootFlow)
+		else
 		{
-			StartRootFlow();
+			ensureMsgf(false, TEXT("UFlowComponent::BeginRootFlow: Can't properly initialize flow component without save game subsystem."));
 		}
 	}
 }
