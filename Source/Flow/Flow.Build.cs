@@ -12,7 +12,7 @@ public class Flow : ModuleRules
 		{
 			"LevelSequence",
 			"SaveGamePlugin",
-			"StructUtils",
+			"StructUtils"
 		});
 
 		PrivateDependencyModuleNames.AddRange(new[]

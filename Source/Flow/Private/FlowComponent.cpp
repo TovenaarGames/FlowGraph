@@ -555,7 +555,7 @@ void UFlowComponent::LoadRootFlow()
 	{
 		VerifyIdentityTags();
 
-		GetFlowSubsystem()->LoadRootFlow(this, RootFlow, SavedAssetInstanceName);
+		GetFlowSubsystem()->LoadRootFlow(this, RootFlow, SavedAssetInstanceName, bAllowMultipleInstances);
 		SavedAssetInstanceName = FString();
 	}
 }
