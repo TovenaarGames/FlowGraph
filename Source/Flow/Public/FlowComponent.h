@@ -72,6 +72,8 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Flow", meta = (Categories = "Flow.Id"))
 	void RemoveIdentityTags(FGameplayTagContainer Tags, const EFlowNetMode NetMode = EFlowNetMode::Authority);
 
+	FGameplayTagContainer GetIdentityTags() const;
+	
 protected:
 	void RegisterWithFlowSubsystem();
 	void UnregisterWithFlowSubsystem();

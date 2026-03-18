@@ -25,7 +25,6 @@ protected:
 
 	static FName INPIN_CompletionTime;
 
-private:
 	FTimerHandle CompletionTimerHandle;
 	FTimerHandle StepTimerHandle;
 

@@ -60,16 +60,21 @@ void UFlowSubsystem::Deinitialize()
 	AbortActiveFlows();
 }
 
-void UFlowSubsystem::OnSerialize(FSaveGameArchive& Archive, bool bIsLoading)
+bool UFlowSubsystem::OnSerialize_Implementation(FSaveGameArchive& Archive, bool bIsLoading)
 {
 	Archive.SerializeField("Flow", [&](FStructuredArchive::FSlot Slot)
 		{
-			// Reuse existing save if possible
-			UFlowSaveGame* save_game = LoadedSaveGame ? LoadedSaveGame : Cast<UFlowSaveGame>(UGameplayStatics::CreateSaveGameObject(UFlowSaveGame::StaticClass()));
+			UFlowSaveGame* save_game = Cast<UFlowSaveGame>(UGameplayStatics::CreateSaveGameObject(UFlowSaveGame::StaticClass()));
 
 			// Append current world data to save game when saving
 			if (!bIsLoading)
 			{
+				// Reuse existing save if possible
+				if (LoadedSaveGame)
+				{
+					save_game = LoadedSaveGame;
+				}
+				
 				OnGameSaved(save_game);
 			}
 
@@ -138,9 +143,11 @@ void UFlowSubsystem::OnSerialize(FSaveGameArchive& Archive, bool bIsLoading)
 				}
 			}
 		});
+
+	return true;
 }
 
-void UFlowSubsystem::ResetSaveGameData()
+void UFlowSubsystem::ResetSaveGameData_Implementation()
 {
 	LoadedSaveGame = nullptr;
 }

@@ -81,24 +81,13 @@ void UFlowComponent::BeginRootFlow(bool bComponentLoadedFromSaveGame)
 {
 	if (RootFlow)
 	{
-		if (USaveGameSubsystem* save_system = GetWorld()->GetGameInstance()->GetSubsystem<USaveGameSubsystem>())
+		if (bComponentLoadedFromSaveGame)
 		{
-			// Wait until the save game system has loaded the flow graph
-			save_system->CallOnLoad(FSimpleMulticastDelegate::FDelegate::CreateLambda([this, bComponentLoadedFromSaveGame]() {
-
-				if (bComponentLoadedFromSaveGame)
-				{
-					LoadRootFlow();
-				}
-				else if (bAutoStartRootFlow)
-				{
-					StartRootFlow();
-				}
-			}));
+			LoadRootFlow();
 		}
-		else
+		else if (bAutoStartRootFlow)
 		{
-			ensureMsgf(false, TEXT("UFlowComponent::BeginRootFlow: Can't properly initialize flow component without save game subsystem."));
+			StartRootFlow();
 		}
 	}
 }
@@ -235,6 +224,11 @@ void UFlowComponent::RemoveIdentityTags(FGameplayTagContainer Tags, const EFlowN
 			}
 		}
 	}
+}
+
+FGameplayTagContainer UFlowComponent::GetIdentityTags() const
+{
+	return IdentityTags;
 }
 
 void UFlowComponent::OnRep_IdentityTags(const FGameplayTagContainer& PreviousTags)

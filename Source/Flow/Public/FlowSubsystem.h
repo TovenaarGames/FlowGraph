@@ -72,8 +72,8 @@ public:
 	virtual void Initialize(FSubsystemCollectionBase& Collection) override;
 	virtual void Deinitialize() override;
 
-	virtual void OnSerialize(FSaveGameArchive& Archive, bool bIsLoading) override;
-	virtual void ResetSaveGameData() override;
+	virtual bool OnSerialize_Implementation(FSaveGameArchive& Archive, bool bIsLoading) override;
+	virtual void ResetSaveGameData_Implementation() override;
 
 	UFUNCTION(BlueprintCallable, Category = "FlowSubsystem")
 	virtual void AbortActiveFlows();
