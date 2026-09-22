@@ -21,7 +21,7 @@ DECLARE_MULTICAST_DELEGATE(FFlowNodeLevelSequenceEvent);
  * - Out (always, even if Sequence is invalid)
  * - Completed
  */
-UCLASS(NotBlueprintable, meta = (DisplayName = "INVALID Play Level Sequence"), Abstract)
+UCLASS(NotBlueprintable, meta = (DisplayName = "Play Level Sequence"))
 class FLOW_API UFlowNode_PlayLevelSequence : public UFlowNode
 {
 	GENERATED_UCLASS_BODY()
