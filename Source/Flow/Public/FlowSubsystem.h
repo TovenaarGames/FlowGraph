@@ -110,7 +110,10 @@ protected:
 public:
 	/* Returns all assets instanced by object from another system like World Settings */
 	UFUNCTION(BlueprintPure, Category = "FlowSubsystem")
-	TMap<UObject*, UFlowAsset*> GetRootInstances() const;
+	TMap<UObject*, UFlowAsset*> GetOwnersMappedToRootInstances() const;
+	
+	/* Returns all assets instanced by object from another system like World Settings */
+	const TMap<TObjectPtr<UFlowAsset>, TWeakObjectPtr<UObject>>& GetRootInstancesMappedToOwners() const;
 	
 	/* Returns asset instanced by specific object */
 	UFUNCTION(BlueprintPure, Category = "FlowSubsystem")
@@ -138,7 +141,7 @@ public:
 	virtual void OnGameLoaded(UFlowSaveGame* SaveGame);
 
 	UFUNCTION(BlueprintCallable, Category = "FlowSubsystem")
-	virtual void LoadRootFlow(UObject* Owner, UFlowAsset* FlowAsset, const FString& SavedAssetInstanceName, const bool bAllowMultipleInstances);
+	virtual UFlowAsset* LoadRootFlow(UObject* Owner, UFlowAsset* FlowAsset, const FString& SavedAssetInstanceName, const bool bAllowMultipleInstances);
 
 	UFUNCTION(BlueprintCallable, Category = "FlowSubsystem")
 	virtual void LoadSubFlow(UFlowNode_SubGraph* SubGraphNode, const FString& SavedAssetInstanceName);

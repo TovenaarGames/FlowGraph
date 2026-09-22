@@ -364,7 +364,7 @@ void UFlowSubsystem::RemoveInstancedTemplate(UFlowAsset* Template)
 	InstancedTemplates.Remove(Template);
 }
 
-TMap<UObject*, UFlowAsset*> UFlowSubsystem::GetRootInstances() const
+TMap<UObject*, UFlowAsset*> UFlowSubsystem::GetOwnersMappedToRootInstances() const
 {
 	TMap<UObject*, UFlowAsset*> Result;
 	for (const TPair<UFlowAsset*, TWeakObjectPtr<UObject>>& RootInstance : ObjectPtrDecay(RootInstances))
@@ -373,6 +373,13 @@ TMap<UObject*, UFlowAsset*> UFlowSubsystem::GetRootInstances() const
 	}
 	return Result;
 }
+
+
+const TMap<TObjectPtr<UFlowAsset>, TWeakObjectPtr<UObject>>& UFlowSubsystem::GetRootInstancesMappedToOwners() const
+{
+	return RootInstances;
+}
+
 
 TSet<UFlowAsset*> UFlowSubsystem::GetRootInstancesByOwner(const UObject* Owner) const
 {
@@ -470,11 +477,11 @@ void UFlowSubsystem::OnGameLoaded(UFlowSaveGame* SaveGame)
 	// it's recommended to do this by overriding method in the subclass
 }
 
-void UFlowSubsystem::LoadRootFlow(UObject* Owner, UFlowAsset* FlowAsset, const FString& SavedAssetInstanceName, const bool bAllowMultipleInstances)
+UFlowAsset* UFlowSubsystem::LoadRootFlow(UObject* Owner, UFlowAsset* FlowAsset, const FString& SavedAssetInstanceName, const bool bAllowMultipleInstances)
 {
 	if (FlowAsset == nullptr || SavedAssetInstanceName.IsEmpty())
 	{
-		return;
+		return nullptr;
 	}
 
 	for (const FFlowAssetSaveData& AssetRecord : LoadedSaveGame->FlowInstances)
@@ -487,9 +494,11 @@ void UFlowSubsystem::LoadRootFlow(UObject* Owner, UFlowAsset* FlowAsset, const F
 			{
 				LoadedInstance->LoadInstance(AssetRecord);
 			}
-			return;
+			return LoadedInstance;
 		}
 	}
+
+	return nullptr;
 }
 
 void UFlowSubsystem::LoadSubFlow(UFlowNode_SubGraph* SubGraphNode, const FString& SavedAssetInstanceName)
