@@ -2,6 +2,7 @@
 
 #include "FlowComponent.h"
 
+#include "Asset/FlowAssetParams.h"
 #include "FlowAsset.h"
 #include "FlowLogChannels.h"
 #include "FlowSettings.h"
@@ -65,11 +66,7 @@ void UFlowComponent::RegisterWithFlowSubsystem()
 {
 	if (UFlowSubsystem* FlowSubsystem = GetFlowSubsystem())
 	{
-		bool bComponentLoadedFromSaveGame = false;
-		if (GetFlowSubsystem()->GetLoadedSaveGame())
-		{
-			bComponentLoadedFromSaveGame = LoadInstance();
-		}
+		const bool bComponentLoadedFromSaveGame = LoadInstance(FlowSubsystem);
 
 		FlowSubsystem->RegisterComponent(this);
 
@@ -233,7 +230,6 @@ FGameplayTagContainer UFlowComponent::GetIdentityTags() const
 
 void UFlowComponent::OnRep_IdentityTags(const FGameplayTagContainer& PreviousTags)
 {
-
 	// Any tags that are now in the IdentityTags container but haven't been previously must have been added.
 	FGameplayTagContainer AddedTags;
 	for (const FGameplayTag& Tag : IdentityTags)
@@ -276,18 +272,24 @@ void UFlowComponent::OnRep_IdentityTags(const FGameplayTagContainer& PreviousTag
 
 void UFlowComponent::VerifyIdentityTags() const
 {
-	if (IdentityTags.IsEmpty() && UFlowSettings::Get()->bWarnAboutMissingIdentityTags)
+#if !NO_LOGGING || UE_ENABLE_DEBUG_DRAWING
+	if (IdentityTags.IsEmpty() && GetDefault<UFlowSettings>()->bWarnAboutMissingIdentityTags)
 	{
 		FString Message = TEXT("Missing Identity Tags on the Flow Component creating Flow Asset instance! This gonna break loading SaveGame for this component!");
 		Message.Append(LINE_TERMINATOR).Append(TEXT("If you're not using SaveSystem, you can silence this warning by unchecking bWarnAboutMissingIdentityTags flag in Flow Settings."));
 		LogError(Message);
 	}
+#endif	
 }
 
 void UFlowComponent::LogError(FString Message, const EFlowOnScreenMessageType OnScreenMessageType) const
 {
+#if !NO_LOGGING || UE_ENABLE_DEBUG_DRAWING
 	Message += TEXT(" --- Flow Component in actor ") + GetOwner()->GetName();
-
+	UE_LOG(LogFlow, Error, TEXT("%s"), *Message);
+#endif
+	
+#if UE_ENABLE_DEBUG_DRAWING
 	if (OnScreenMessageType == EFlowOnScreenMessageType::Permanent)
 	{
 		if (UWorld* World = GetWorld())
@@ -308,12 +310,11 @@ void UFlowComponent::LogError(FString Message, const EFlowOnScreenMessageType On
 			}
 		}
 	}
-	else
+	else if (OnScreenMessageType == EFlowOnScreenMessageType::Temporary)
 	{
 		GEngine->AddOnScreenDebugMessage(-1, 2.0f, FColor::Red, Message);
 	}
-
-	UE_LOG(LogFlow, Error, TEXT("%s"), *Message);
+#endif
 }
 
 void UFlowComponent::NotifyGraph(const FGameplayTag NotifyTag, const EFlowNetMode NetMode /* = EFlowNetMode::Authority*/)
@@ -456,7 +457,8 @@ void UFlowComponent::StartRootFlow()
 		{
 			VerifyIdentityTags();
 
-			FlowSubsystem->StartRootFlow(this, RootFlow, bAllowMultipleInstances);
+			const TScriptInterface<IFlowDataPinValueSupplierInterface> RootFlowParamsAsInterface = RootFlowParams.ResolveFlowAssetParams();
+			FlowSubsystem->StartRootFlow(this, RootFlow, RootFlowParamsAsInterface, bAllowMultipleInstances);
 		}
 	}
 }
@@ -516,21 +518,6 @@ void UFlowComponent::DispatchRootFlowCustomEvent(UFlowAsset* RootFlowInstance, c
 	OnRootFlowCustomEvent(RootFlowInstance, EventName);
 }
 
-void UFlowComponent::BP_OnTriggerRootFlowOutputEvent(UFlowAsset* RootFlowInstance, const FName& EventName)
-{
-	BP_OnRootFlowCustomEvent(RootFlowInstance, EventName);
-}
-
-void UFlowComponent::OnTriggerRootFlowOutputEvent(UFlowAsset* RootFlowInstance, const FName& EventName)
-{
-	OnRootFlowCustomEvent(RootFlowInstance, EventName);
-}
-
-void UFlowComponent::OnTriggerRootFlowOutputEventDispatcher(UFlowAsset* RootFlowInstance, const FName& EventName)
-{
-	DispatchRootFlowCustomEvent(RootFlowInstance, EventName);
-}
-
 void UFlowComponent::SaveRootFlow(TArray<FFlowAssetSaveData>& SavedFlowInstances)
 {
 	if (UFlowAsset* FlowAssetInstance = GetRootFlowInstance())
@@ -571,22 +558,18 @@ FFlowComponentSaveData UFlowComponent::SaveInstance()
 	return ComponentRecord;
 }
 
-bool UFlowComponent::LoadInstance()
+bool UFlowComponent::LoadInstance(const UFlowSubsystem* FlowSubsystem)
 {
-	const UFlowSaveGame* SaveGame = GetFlowSubsystem()->GetLoadedSaveGame();
-	if (SaveGame->FlowComponents.Num() > 0)
+	if (FlowSubsystem && CanSave())
 	{
-		for (const FFlowComponentSaveData& ComponentRecord : SaveGame->FlowComponents)
+		if (const FFlowComponentSaveData* Record = FlowSubsystem->GetLoadedComponentRecord(this))
 		{
-			if (ComponentRecord.WorldName == GetWorld()->GetName() && ComponentRecord.ActorInstanceName == GetOwner()->GetName())
-			{
-				FMemoryReader MemoryReader(ComponentRecord.ComponentData, true);
-				FFlowArchive Ar(MemoryReader);
-				Serialize(Ar);
+			FMemoryReader MemoryReader(Record->ComponentData, true);
+			FFlowArchive Ar(MemoryReader);
+			Serialize(Ar);
 
-				OnLoad();
-				return true;
-			}
+			OnLoad();
+			return true;
 		}
 	}
 
@@ -620,7 +603,7 @@ bool UFlowComponent::IsFlowNetMode(const EFlowNetMode NetMode) const
 		case EFlowNetMode::Authority:
 			return GetOwner()->HasAuthority();
 		case EFlowNetMode::ClientOnly:
-			return IsNetMode(NM_Client) && UFlowSettings::Get()->bCreateFlowSubsystemOnClients;
+			return IsNetMode(NM_Client) && GetDefault<UFlowSettings>()->bCreateFlowSubsystemOnClients;
 		case EFlowNetMode::ServerOnly:
 			return IsNetMode(NM_DedicatedServer) || IsNetMode(NM_ListenServer);
 		case EFlowNetMode::SinglePlayerOnly:
