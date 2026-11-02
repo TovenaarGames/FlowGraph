@@ -1,5 +1,4 @@
 // Copyright https://github.com/MothCocoon/FlowGraph/graphs/contributors
-
 using UnrealBuildTool;
 
 public class Flow : ModuleRules
@@ -8,14 +7,14 @@ public class Flow : ModuleRules
 	{
 		PCHUsage = PCHUsageMode.UseExplicitOrSharedPCHs;
 
-		PublicDependencyModuleNames.AddRange(new[]
-		{
+		PublicDependencyModuleNames.AddRange(
+		[
 			"LevelSequence",
 			"SaveGamePlugin"
-		});
+		]);
 
-		PrivateDependencyModuleNames.AddRange(new[]
-		{
+		PrivateDependencyModuleNames.AddRange(
+		[
 			"Core",
 			"CoreUObject",
 			"DeveloperSettings",
@@ -26,15 +25,18 @@ public class Flow : ModuleRules
 			"NetCore",
 			"Slate",
 			"SlateCore"
-		});
+		]);
 
 		if (target.Type == TargetType.Editor)
 		{
-			PublicDependencyModuleNames.AddRange(new[]
-			{
+			PublicDependencyModuleNames.AddRange(
+			[
+				"GraphEditor",
 				"MessageLog",
+				"PropertyEditor",
+				"SourceControl",
 				"UnrealEd"
-			});
+			]);
 		}
 	}
 }

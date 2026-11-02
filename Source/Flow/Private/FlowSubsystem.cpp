@@ -135,7 +135,7 @@ bool UFlowSubsystem::OnSerialize_Implementation(FSaveGameArchive& Archive, bool 
 					{
 						if (UFlowComponent* component = world_settings->GetComponentByClass<UFlowComponent>())
 						{
-							if (component->LoadInstance())
+							if (component->LoadInstance(this))
 							{
 								AbortActiveFlows();
 								component->LoadRootFlow();
